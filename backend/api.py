@@ -7,10 +7,11 @@ from typing import List, Dict, Optional
 
 # Add the parent directory to the path to import main
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from main import answer_question
+from main import answer_question, SEARCH_ENGINES, DEFAULT_SEARCH_ENGINE
 
 class QuestionRequest(BaseModel):
     question: str
+    search_engine: str = DEFAULT_SEARCH_ENGINE  # Default to configured engine
 
 class ReadMoreItem(BaseModel):
     url: str
@@ -35,7 +36,21 @@ app.add_middleware(
 @app.get("/")
 async def root():
     """Health check endpoint"""
-    return {"status": "ok", "message": "RAG Web Search API is running"}
+    return {
+        "status": "ok", 
+        "message": "RAG Web Search API is running",
+        "available_engines": list(SEARCH_ENGINES.keys()),
+        "default_engine": DEFAULT_SEARCH_ENGINE
+    }
+
+@app.get("/engines")
+async def get_engines():
+    """Get available search engines"""
+    return {
+        "available_engines": list(SEARCH_ENGINES.keys()),
+        "descriptions": SEARCH_ENGINES,
+        "default_engine": DEFAULT_SEARCH_ENGINE
+    }
 
 @app.post("/api/ask", response_model=AnswerResponse)
 async def ask(request: QuestionRequest):
@@ -44,10 +59,15 @@ async def ask(request: QuestionRequest):
         if not request.question.strip():
             raise HTTPException(status_code=400, detail="Question cannot be empty")
         
+        # Validate search engine
+        search_engine = request.search_engine
+        if search_engine not in SEARCH_ENGINES:
+            search_engine = DEFAULT_SEARCH_ENGINE
+            
         # Get raw answer from the main module
-        raw_answer = answer_question(request.question)
+        raw_answer = answer_question(request.question, search_engine=search_engine)
         
-        # Format the answer (using the same logic from app.py)
+        # Format the answer
         formatted_answer = format_answer(raw_answer)
         
         return formatted_answer
